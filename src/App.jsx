@@ -21,6 +21,7 @@ const DB_NAME = "purrboard-db";
 const STORE_NAME = "boards";
 const BOARD_RECORD_KEY = "current";
 const MIN_SCALE = 0.01;
+const ARRANGE_GAP = 0;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -36,6 +37,62 @@ function uid() {
 
 function uniqueIds(ids) {
   return [...new Set(ids)];
+}
+
+function getSelectionBounds(objects) {
+  return {
+    minX: Math.min(...objects.map((obj) => obj.x)),
+    minY: Math.min(...objects.map((obj) => obj.y)),
+    maxX: Math.max(...objects.map((obj) => obj.x + (obj.width || 0))),
+    maxY: Math.max(...objects.map((obj) => obj.y + (obj.height || 0))),
+  };
+}
+
+function createGridArrangement(images) {
+  const cols = Math.max(1, Math.ceil(Math.sqrt(images.length)));
+  const rowCount = Math.ceil(images.length / cols);
+  const colWidths = Array(cols).fill(0);
+  const rowHeights = Array(rowCount).fill(0);
+
+  images.forEach((image, index) => {
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+    colWidths[col] = Math.max(colWidths[col], image.width);
+    rowHeights[row] = Math.max(rowHeights[row], image.height);
+  });
+
+  return images.map((image, index) => {
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+    const x = colWidths.slice(0, col).reduce((sum, width) => sum + width, 0) + col * ARRANGE_GAP;
+    const y = rowHeights.slice(0, row).reduce((sum, height) => sum + height, 0) + row * ARRANGE_GAP;
+    return { id: image.id, x, y };
+  });
+}
+
+function createPackedArrangement(images, sourceBounds) {
+  const maxRowWidth = Math.max(
+    Math.round(Math.sqrt(images.reduce((sum, image) => sum + image.width * image.height, 0)) * 1.8),
+    sourceBounds.maxX - sourceBounds.minX
+  );
+
+  let cursorX = 0;
+  let cursorY = 0;
+  let rowHeight = 0;
+
+  return images.map((image, index) => {
+    const nextWidth = cursorX === 0 ? image.width : cursorX + ARRANGE_GAP + image.width;
+    if (index > 0 && nextWidth > maxRowWidth) {
+      cursorX = 0;
+      cursorY += rowHeight + ARRANGE_GAP;
+      rowHeight = 0;
+    }
+
+    const position = { id: image.id, x: cursorX, y: cursorY };
+    cursorX += image.width + ARRANGE_GAP;
+    rowHeight = Math.max(rowHeight, image.height);
+    return position;
+  });
 }
 
 function getSelectionIdsFromBox(selectionBox, objects, viewport) {
@@ -127,6 +184,7 @@ export default function PurrBoardMvpApp() {
   const [boardSize, setBoardSize] = useState({ width: 1200, height: 800 });
   const [hasLoadedBoard, setHasLoadedBoard] = useState(false);
   const [theme, setTheme] = useState("light");
+  const [arrangeMode, setArrangeMode] = useState("grid");
 
   useEffect(() => {
     const savedTheme = localStorage.getItem(THEME_KEY);
@@ -542,6 +600,37 @@ export default function PurrBoardMvpApp() {
     setSelection([group.id]);
   };
 
+  const arrangeSelection = () => {
+    const selectedImages = items
+      .filter((item) => item.type === "image" && selection.includes(item.id))
+      .sort((a, b) => (a.z || 0) - (b.z || 0));
+
+    if (selectedImages.length < 2) return;
+
+    const sourceBounds = getSelectionBounds(selectedImages);
+    const nextPositions =
+      arrangeMode === "pack"
+        ? createPackedArrangement(selectedImages, sourceBounds)
+        : createGridArrangement(selectedImages);
+
+    const arrangedById = new Map(
+      nextPositions.map((position) => [
+        position.id,
+        {
+          x: sourceBounds.minX + position.x,
+          y: sourceBounds.minY + position.y,
+        },
+      ])
+    );
+
+    setItems((prev) =>
+      prev.map((item) => {
+        const position = arrangedById.get(item.id);
+        return position ? { ...item, ...position } : item;
+      })
+    );
+  };
+
   useEffect(() => {
     setNotes((prev) => {
       let changed = false;
@@ -587,6 +676,10 @@ export default function PurrBoardMvpApp() {
   );
 
   const activeSelection = selectionBox ? selectionPreviewIds : selection;
+  const selectedImageCount = useMemo(
+    () => items.filter((item) => selection.includes(item.id)).length,
+    [items, selection]
+  );
   const isDark = theme === "dark";
 
   const shellClass = isDark
@@ -652,6 +745,25 @@ export default function PurrBoardMvpApp() {
             >
               <Square className="mr-2 h-4 w-4" />
               グループ化
+            </Button>
+            <label className={`flex items-center rounded-2xl border px-3 py-2 text-sm ${statusPillClass}`}>
+              <span className="mr-2 whitespace-nowrap">整列</span>
+              <select
+                value={arrangeMode}
+                onChange={(e) => setArrangeMode(e.target.value)}
+                className={`bg-transparent outline-none ${isDark ? "text-white" : "text-slate-900"}`}
+              >
+                <option value="grid">グリッド</option>
+                <option value="pack">横詰め</option>
+              </select>
+            </label>
+            <Button
+              variant="outline"
+              onClick={arrangeSelection}
+              className={`rounded-2xl px-4 py-2.5 ${secondaryButtonClass}`}
+              disabled={selectedImageCount < 2}
+            >
+              自動整理
             </Button>
             <Button variant="outline" onClick={() => zoom(1.1)} className={`rounded-2xl px-3 py-2.5 ${secondaryButtonClass}`} aria-label="zoom in">
               <ZoomIn className="h-4 w-4" />
