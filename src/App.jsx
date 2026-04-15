@@ -680,6 +680,15 @@ export default function PurrBoardMvpApp() {
     () => items.filter((item) => selection.includes(item.id)).length,
     [items, selection]
   );
+  const activeImageId = useMemo(() => {
+    const imageSelections = selection.filter((id) => items.some((item) => item.id === id && item.type === "image"));
+    return imageSelections.at(-1) || null;
+  }, [items, selection]);
+  const selectedImageObjects = useMemo(
+    () => items.filter((item) => activeSelection.includes(item.id)),
+    [activeSelection, items]
+  );
+  const hasImageSelection = selectedImageObjects.length > 0;
   const isDark = theme === "dark";
 
   const shellClass = isDark
@@ -701,6 +710,9 @@ export default function PurrBoardMvpApp() {
   const imageSelectedClass = isDark
     ? "border-sky-300 bg-slate-900 shadow-[0_0_0_3px_rgba(125,211,252,0.7),0_18px_40px_rgba(14,165,233,0.24)]"
     : "border-sky-500 bg-white shadow-[0_0_0_3px_rgba(56,189,248,0.85),0_18px_40px_rgba(14,165,233,0.18)]";
+  const imageActiveClass = isDark
+    ? "border-cyan-200 bg-slate-900 shadow-[0_0_0_4px_rgba(103,232,249,0.85),0_24px_54px_rgba(34,211,238,0.32)]"
+    : "border-cyan-500 bg-white shadow-[0_0_0_4px_rgba(34,211,238,0.9),0_24px_54px_rgba(14,165,233,0.24)]";
   const groupBaseClass = isDark ? "border-sky-500/70 bg-sky-500/10" : "border-sky-400 bg-sky-100/40";
   const groupSelectedClass = isDark
     ? "ring-4 ring-sky-400/40 shadow-[0_24px_50px_rgba(2,132,199,0.28)]"
@@ -841,17 +853,33 @@ export default function PurrBoardMvpApp() {
             >
               {sortedObjects.map((obj) => {
                 const selected = activeSelection.includes(obj.id);
+                const isActiveImage = obj.id === activeImageId;
 
                 if (obj.type === "image") {
                   return (
                     <div
                       key={obj.id}
                       data-image-id={obj.id}
-                      className={`absolute cursor-grab border transition ${selected ? imageSelectedClass : imageBaseClass}`}
+                      className={`absolute cursor-grab border transition duration-150 ${
+                        selected ? (isActiveImage ? imageActiveClass : imageSelectedClass) : imageBaseClass
+                      } ${hasImageSelection && !selected ? "opacity-80 saturate-[0.78]" : "opacity-100 saturate-100"}`}
                       style={{ left: obj.x, top: obj.y, width: obj.width, height: obj.height }}
                       onPointerDown={(e) => startItemDrag(e, obj.id)}
                     >
                       <img src={obj.src} alt={obj.name} className="h-full w-full object-cover" draggable={false} />
+                      {selected && (
+                        <div
+                          className={`pointer-events-none absolute inset-0 ${
+                            isActiveImage
+                              ? isDark
+                                ? "bg-cyan-300/14"
+                                : "bg-cyan-300/12"
+                              : isDark
+                                ? "bg-sky-300/10"
+                                : "bg-sky-300/8"
+                          }`}
+                        />
+                      )}
                       {selected && (
                         <>
                           {[
