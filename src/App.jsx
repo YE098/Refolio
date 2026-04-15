@@ -823,7 +823,7 @@ export default function PurrBoardMvpApp() {
         <div className="flex flex-1">
           <div
             ref={boardRef}
-            className={`relative flex-1 overflow-hidden ${boardClass}`}
+            className={`board-surface relative flex-1 overflow-hidden ${boardClass}`}
             onDragOver={(e) => e.preventDefault()}
             onDrop={onDrop}
             onPointerDown={(e) => {

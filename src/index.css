@@ -56,3 +56,14 @@ img {
 .dark-board {
   background-color: rgba(2, 6, 23, 0.45);
 }
+
+.board-surface,
+.board-surface * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.board-surface textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
