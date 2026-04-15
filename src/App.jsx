@@ -302,8 +302,23 @@ export default function PurrBoardMvpApp() {
     };
   }, [zoomAtPoint]);
 
+  const startPan = useCallback((clientX, clientY) => {
+    panStateRef.current = {
+      startClientX: clientX,
+      startClientY: clientY,
+      startViewportX: viewport.x,
+      startViewportY: viewport.y,
+    };
+    setIsPanning(true);
+  }, [viewport.x, viewport.y]);
+
   const startItemDrag = (e, id) => {
     e.stopPropagation();
+    if (e.button === 1 || e.altKey) {
+      startPan(e.clientX, e.clientY);
+      return;
+    }
+
     const point = toBoardCoords(e.clientX, e.clientY);
     const draggedItem = getObjectById(id);
     if (!draggedItem) return;
@@ -333,6 +348,11 @@ export default function PurrBoardMvpApp() {
 
   const startImageResize = (e, id, handle) => {
     e.stopPropagation();
+    if (e.button === 1 || e.altKey) {
+      startPan(e.clientX, e.clientY);
+      return;
+    }
+
     const point = toBoardCoords(e.clientX, e.clientY);
     const image = items.find((item) => item.id === id && item.type === "image");
     if (!image) return;
@@ -611,13 +631,7 @@ export default function PurrBoardMvpApp() {
             onDrop={onDrop}
             onPointerDown={(e) => {
               if (e.button === 1 || e.altKey) {
-                panStateRef.current = {
-                  startClientX: e.clientX,
-                  startClientY: e.clientY,
-                  startViewportX: viewport.x,
-                  startViewportY: viewport.y,
-                };
-                setIsPanning(true);
+                startPan(e.clientX, e.clientY);
                 return;
               }
               const rect = boardRef.current?.getBoundingClientRect();
