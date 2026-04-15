@@ -716,19 +716,20 @@ export default function PurrBoardMvpApp() {
     <div className={`h-screen w-full ${shellClass}`}>
       <div className="flex h-full flex-col">
         <div className={`border-b px-5 py-4 backdrop-blur-xl ${headerClass}`}>
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
-            <div className="mr-4 flex items-center gap-3">
+          <div className="mx-auto flex max-w-7xl flex-col gap-4">
+            <div className="flex items-start gap-3">
               <div className={`rounded-3xl px-4 py-2 text-sm font-semibold tracking-wide shadow-lg ${badgeClass}`}>PurrBoard</div>
               <div>
-                <div className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-800"}`}>
+                <div className={`text-sm font-semibold leading-5 ${isDark ? "text-slate-100" : "text-slate-800"}`}>
                   画像を集めて、意味をつけて、まとめて動かす
                 </div>
-                <div className={`text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                <div className={`mt-1 text-xs leading-5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                   PureRef の軽さと Milanote の整理感をひとつのボードに
                 </div>
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => fileInputRef.current?.click()} className={`rounded-2xl px-4 py-2.5 shadow-sm ${primaryButtonClass}`}>
               <Upload className="mr-2 h-4 w-4" />
               画像追加
@@ -794,7 +795,9 @@ export default function PurrBoardMvpApp() {
               削除
             </Button>
 
-            <div className="ml-auto flex items-center gap-2">
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
               <div className={`rounded-2xl border px-3 py-2 text-sm ${statusPillClass}`}>
                 選択 <span className={`font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>{activeSelection.length}</span>
               </div>
