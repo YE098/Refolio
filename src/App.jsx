@@ -595,10 +595,10 @@ export default function PurrBoardMvpApp() {
   const headerClass = isDark ? "border-slate-800 bg-slate-950/78" : "border-slate-200 bg-white/80";
   const badgeClass = isDark ? "bg-sky-400 text-slate-950" : "bg-slate-950 text-white";
   const secondaryButtonClass = isDark
-    ? "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
+    ? "!border-slate-700 !bg-slate-900 !text-slate-100 hover:!bg-slate-800 disabled:!border-slate-800 disabled:!bg-slate-900/70 disabled:!text-slate-500"
     : "border-slate-300 bg-white text-neutral-900 hover:bg-neutral-100";
   const primaryButtonClass = isDark
-    ? "bg-sky-400 text-slate-950 hover:bg-sky-300"
+    ? "!border-sky-300 !bg-sky-400 !text-slate-950 hover:!bg-sky-300"
     : "bg-slate-950 text-white hover:bg-slate-800";
   const statusPillClass = isDark
     ? "border-slate-700 bg-slate-900 text-slate-300"
