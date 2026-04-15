@@ -22,12 +22,38 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function clampMin(value, min) {
+  return Math.max(min, value);
+}
+
+const MIN_SCALE = 0.01;
+
 function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
 function uniqueIds(ids) {
   return [...new Set(ids)];
+}
+
+function getSelectionIdsFromBox(selectionBox, objects, viewport) {
+  if (!selectionBox) return [];
+
+  const x1 = Math.min(selectionBox.x1, selectionBox.x2);
+  const y1 = Math.min(selectionBox.y1, selectionBox.y2);
+  const x2 = Math.max(selectionBox.x1, selectionBox.x2);
+  const y2 = Math.max(selectionBox.y1, selectionBox.y2);
+
+  return objects
+    .filter((obj) => {
+      const sx = obj.x * viewport.scale + viewport.x;
+      const sy = obj.y * viewport.scale + viewport.y;
+      const sw = (obj.width || 180) * viewport.scale;
+      const sh = (obj.height || 120) * viewport.scale;
+
+      return sx >= x1 && sy >= y1 && sx + sw <= x2 && sy + sh <= y2;
+    })
+    .map((obj) => obj.id);
 }
 
 function openBoardDatabase() {
@@ -87,6 +113,7 @@ async function writeBoardState(payload) {
 export default function PurrBoardMvpApp() {
   const boardRef = useRef(null);
   const fileInputRef = useRef(null);
+  const panStateRef = useRef(null);
   const [items, setItems] = useState([]);
   const [notes, setNotes] = useState([]);
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
@@ -247,7 +274,7 @@ export default function PurrBoardMvpApp() {
     if (!rect) return;
 
     setViewport((prev) => {
-      const nextScale = clamp(Number((prev.scale * factor).toFixed(2)), 0.3, 3);
+      const nextScale = clampMin(Number((prev.scale * factor).toFixed(4)), MIN_SCALE);
       const boardX = (clientX - rect.left - prev.x) / prev.scale;
       const boardY = (clientY - rect.top - prev.y) / prev.scale;
 
@@ -369,10 +396,15 @@ export default function PurrBoardMvpApp() {
           })
         );
       } else if (isPanning) {
+        const panState = panStateRef.current;
+        if (!panState) return;
+
+        const dx = e.clientX - panState.startClientX;
+        const dy = e.clientY - panState.startClientY;
         setViewport((prev) => ({
           ...prev,
-          x: prev.x + e.movementX,
-          y: prev.y + e.movementY,
+          x: panState.startViewportX + dx,
+          y: panState.startViewportY + dy,
         }));
       } else if (selectionBox) {
         const rect = boardRef.current?.getBoundingClientRect();
@@ -387,23 +419,10 @@ export default function PurrBoardMvpApp() {
     setDragging(null);
     setResizing(null);
     setIsPanning(false);
+    panStateRef.current = null;
 
     if (selectionBox) {
-      const x1 = Math.min(selectionBox.x1, selectionBox.x2);
-      const y1 = Math.min(selectionBox.y1, selectionBox.y2);
-      const x2 = Math.max(selectionBox.x1, selectionBox.x2);
-      const y2 = Math.max(selectionBox.y1, selectionBox.y2);
-
-      const selectedIds = [...items, ...notes]
-        .filter((obj) => {
-          const sx = obj.x * viewport.scale + viewport.x;
-          const sy = obj.y * viewport.scale + viewport.y;
-          const sw = (obj.width || 180) * viewport.scale;
-          const sh = (obj.height || 120) * viewport.scale;
-          return sx < x2 && sx + sw > x1 && sy < y2 && sy + sh > y1;
-        })
-        .map((obj) => obj.id);
-
+      const selectedIds = getSelectionIdsFromBox(selectionBox, [...items, ...notes], viewport);
       setSelection(selectedIds);
       setSelectionBox(null);
     }
@@ -421,7 +440,7 @@ export default function PurrBoardMvpApp() {
   const zoom = (factor) => {
     setViewport((prev) => ({
       ...prev,
-      scale: clamp(Number((prev.scale * factor).toFixed(2)), 0.3, 3),
+      scale: clampMin(Number((prev.scale * factor).toFixed(4)), MIN_SCALE),
     }));
   };
 
@@ -516,6 +535,11 @@ export default function PurrBoardMvpApp() {
   }, [getObjectById, items, notes]);
 
   const sortedObjects = useMemo(() => [...notes, ...items].sort((a, b) => (a.z || 0) - (b.z || 0)), [items, notes]);
+  const selectionPreviewIds = useMemo(
+    () => getSelectionIdsFromBox(selectionBox, [...items, ...notes], viewport),
+    [items, notes, selectionBox, viewport]
+  );
+  const activeSelection = selectionBox ? selectionPreviewIds : selection;
   return (
     <div className="h-screen w-full bg-[linear-gradient(180deg,#f8fafc_0%,#edf2f7_100%)] text-neutral-900">
       <div className="flex h-full flex-col">
@@ -570,7 +594,7 @@ export default function PurrBoardMvpApp() {
 
             <div className="ml-auto flex items-center gap-2">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                選択 <span className="font-semibold text-slate-900">{selection.length}</span>
+                選択 <span className="font-semibold text-slate-900">{activeSelection.length}</span>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
                 ズーム <span className="font-semibold text-slate-900">{Math.round(viewport.scale * 100)}%</span>
@@ -586,7 +610,13 @@ export default function PurrBoardMvpApp() {
             onDragOver={(e) => e.preventDefault()}
             onDrop={onDrop}
             onPointerDown={(e) => {
-              if (e.button === 1 || e.altKey || e.shiftKey) {
+              if (e.button === 1 || e.altKey) {
+                panStateRef.current = {
+                  startClientX: e.clientX,
+                  startClientY: e.clientY,
+                  startViewportX: viewport.x,
+                  startViewportY: viewport.y,
+                };
                 setIsPanning(true);
                 return;
               }
@@ -609,14 +639,14 @@ export default function PurrBoardMvpApp() {
               }}
             >
               {sortedObjects.map((obj) => {
-                const selected = selection.includes(obj.id);
+                const selected = activeSelection.includes(obj.id);
 
                 if (obj.type === "image") {
                   return (
                     <div
                       key={obj.id}
                       data-image-id={obj.id}
-                      className={`absolute cursor-grab rounded-[26px] border bg-white transition ${
+                      className={`absolute cursor-grab border bg-white transition ${
                         selected
                           ? "border-sky-500 shadow-[0_0_0_3px_rgba(56,189,248,0.85),0_18px_40px_rgba(14,165,233,0.18)]"
                           : "border-white/70 shadow-[0_16px_36px_rgba(15,23,42,0.12)]"
@@ -624,9 +654,7 @@ export default function PurrBoardMvpApp() {
                       style={{ left: obj.x, top: obj.y, width: obj.width, height: obj.height }}
                       onPointerDown={(e) => startItemDrag(e, obj.id)}
                     >
-                      <div className="h-full w-full overflow-hidden rounded-[22px]">
-                        <img src={obj.src} alt={obj.name} className="h-full w-full object-cover" draggable={false} />
-                      </div>
+                      <img src={obj.src} alt={obj.name} className="h-full w-full object-cover" draggable={false} />
                       {selected && (
                         <>
                           {[
