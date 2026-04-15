@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   FolderOpen,
   Image as ImageIcon,
+  Moon,
   RotateCcw,
   Square,
   StickyNote,
+  Sun,
   Trash2,
   Upload,
   ZoomIn,
@@ -14,9 +16,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 const STORAGE_KEY = "purrboard-mvp-v1";
+const THEME_KEY = "purrboard-theme";
 const DB_NAME = "purrboard-db";
 const STORE_NAME = "boards";
 const BOARD_RECORD_KEY = "current";
+const MIN_SCALE = 0.01;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -25,8 +29,6 @@ function clamp(value, min, max) {
 function clampMin(value, min) {
   return Math.max(min, value);
 }
-
-const MIN_SCALE = 0.01;
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
@@ -50,7 +52,6 @@ function getSelectionIdsFromBox(selectionBox, objects, viewport) {
       const sy = obj.y * viewport.scale + viewport.y;
       const sw = (obj.width || 180) * viewport.scale;
       const sh = (obj.height || 120) * viewport.scale;
-
       return sx >= x1 && sy >= y1 && sx + sw <= x2 && sy + sh <= y2;
     })
     .map((obj) => obj.id);
@@ -114,6 +115,7 @@ export default function PurrBoardMvpApp() {
   const boardRef = useRef(null);
   const fileInputRef = useRef(null);
   const panStateRef = useRef(null);
+
   const [items, setItems] = useState([]);
   const [notes, setNotes] = useState([]);
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
@@ -124,6 +126,24 @@ export default function PurrBoardMvpApp() {
   const [selectionBox, setSelectionBox] = useState(null);
   const [boardSize, setBoardSize] = useState({ width: 1200, height: 800 });
   const [hasLoadedBoard, setHasLoadedBoard] = useState(false);
+  const [theme, setTheme] = useState("light");
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    if (savedTheme === "light" || savedTheme === "dark") {
+      setTheme(savedTheme);
+      return;
+    }
+
+    if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+      setTheme("dark");
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     let isMounted = true;
@@ -141,7 +161,7 @@ export default function PurrBoardMvpApp() {
           return;
         }
       } catch {
-        // fall through to legacy localStorage migration
+        // fall through to localStorage migration
       }
 
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -153,6 +173,7 @@ export default function PurrBoardMvpApp() {
       try {
         const parsed = JSON.parse(raw);
         if (!isMounted) return;
+
         setItems(parsed.items || []);
         setNotes(parsed.notes || []);
         setViewport(parsed.viewport || { x: 0, y: 0, scale: 1 });
@@ -196,6 +217,7 @@ export default function PurrBoardMvpApp() {
       const rect = boardRef.current.getBoundingClientRect();
       setBoardSize({ width: rect.width, height: rect.height });
     };
+
     resize();
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
@@ -205,6 +227,7 @@ export default function PurrBoardMvpApp() {
     (clientX, clientY) => {
       const rect = boardRef.current?.getBoundingClientRect();
       if (!rect) return { x: 0, y: 0 };
+
       return {
         x: (clientX - rect.left - viewport.x) / viewport.scale,
         y: (clientY - rect.top - viewport.y) / viewport.scale,
@@ -297,20 +320,21 @@ export default function PurrBoardMvpApp() {
     };
 
     board.addEventListener("wheel", handleWheel, { passive: false });
-    return () => {
-      board.removeEventListener("wheel", handleWheel);
-    };
+    return () => board.removeEventListener("wheel", handleWheel);
   }, [zoomAtPoint]);
 
-  const startPan = useCallback((clientX, clientY) => {
-    panStateRef.current = {
-      startClientX: clientX,
-      startClientY: clientY,
-      startViewportX: viewport.x,
-      startViewportY: viewport.y,
-    };
-    setIsPanning(true);
-  }, [viewport.x, viewport.y]);
+  const startPan = useCallback(
+    (clientX, clientY) => {
+      panStateRef.current = {
+        startClientX: clientX,
+        startClientY: clientY,
+        startViewportX: viewport.x,
+        startViewportY: viewport.y,
+      };
+      setIsPanning(true);
+    },
+    [viewport.x, viewport.y]
+  );
 
   const startItemDrag = (e, id) => {
     e.stopPropagation();
@@ -331,11 +355,11 @@ export default function PurrBoardMvpApp() {
       : selection.includes(id)
         ? selection
         : [id];
+
     const normalizedSelection = nextSelection.length ? nextSelection : [id];
     const dragIds = draggedItem.groupedIds ? uniqueIds([id, ...draggedItem.groupedIds]) : normalizedSelection;
 
     setSelection(normalizedSelection);
-
     setDragging({
       ids: dragIds,
       startPointer: point,
@@ -388,7 +412,6 @@ export default function PurrBoardMvpApp() {
         setItems((prev) =>
           prev.map((item) => {
             if (item.id !== resizing.id) return item;
-
             return {
               ...item,
               x: handle.includes("w") ? anchorX - nextWidth : anchorX,
@@ -405,13 +428,14 @@ export default function PurrBoardMvpApp() {
 
         setItems((prev) =>
           prev.map((item) => {
-            const original = dragging.initialPositions.find((p) => p.id === item.id);
+            const original = dragging.initialPositions.find((entry) => entry.id === item.id);
             return original ? { ...item, x: original.x + dx, y: original.y + dy } : item;
           })
         );
+
         setNotes((prev) =>
           prev.map((note) => {
-            const original = dragging.initialPositions.find((p) => p.id === note.id);
+            const original = dragging.initialPositions.find((entry) => entry.id === note.id);
             return original ? { ...note, x: original.x + dx, y: original.y + dy } : note;
           })
         );
@@ -485,21 +509,23 @@ export default function PurrBoardMvpApp() {
       height: 140,
       z: Date.now(),
     };
+
     setNotes((prev) => [...prev, note]);
     setSelection([note.id]);
   };
 
   const groupSelection = () => {
     if (selection.length < 2) return;
+
     const objects = [...items, ...notes].filter((obj) => selection.includes(obj.id));
     if (!objects.length) return;
 
-    const minX = Math.min(...objects.map((o) => o.x)) - 20;
-    const minY = Math.min(...objects.map((o) => o.y)) - 20;
-    const maxX = Math.max(...objects.map((o) => o.x + (o.width || 180))) + 20;
-    const maxY = Math.max(...objects.map((o) => o.y + (o.height || 120))) + 20;
+    const minX = Math.min(...objects.map((obj) => obj.x)) - 20;
+    const minY = Math.min(...objects.map((obj) => obj.y)) - 20;
+    const maxX = Math.max(...objects.map((obj) => obj.x + (obj.width || 180))) + 20;
+    const maxY = Math.max(...objects.map((obj) => obj.y + (obj.height || 120))) + 20;
 
-    const note = {
+    const group = {
       id: uid(),
       type: "group",
       text: "グループ",
@@ -507,13 +533,13 @@ export default function PurrBoardMvpApp() {
       y: minY,
       width: maxX - minX,
       height: maxY - minY,
-      z: Math.min(...objects.map((o) => o.z || 0)) - 1,
+      z: Math.min(...objects.map((obj) => obj.z || 0)) - 1,
       isGroup: true,
       groupedIds: objects.map((obj) => obj.id),
     };
 
-    setNotes((prev) => [...prev, note]);
-    setSelection([note.id]);
+    setNotes((prev) => [...prev, group]);
+    setSelection([group.id]);
   };
 
   useEffect(() => {
@@ -559,48 +585,92 @@ export default function PurrBoardMvpApp() {
     () => getSelectionIdsFromBox(selectionBox, [...items, ...notes], viewport),
     [items, notes, selectionBox, viewport]
   );
+
   const activeSelection = selectionBox ? selectionPreviewIds : selection;
+  const isDark = theme === "dark";
+
+  const shellClass = isDark
+    ? "bg-[linear-gradient(180deg,#020617_0%,#111827_100%)] text-slate-100"
+    : "bg-[linear-gradient(180deg,#f8fafc_0%,#edf2f7_100%)] text-neutral-900";
+  const headerClass = isDark ? "border-slate-800 bg-slate-950/78" : "border-slate-200 bg-white/80";
+  const badgeClass = isDark ? "bg-sky-400 text-slate-950" : "bg-slate-950 text-white";
+  const secondaryButtonClass = isDark
+    ? "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
+    : "border-slate-300 bg-white text-neutral-900 hover:bg-neutral-100";
+  const primaryButtonClass = isDark
+    ? "bg-sky-400 text-slate-950 hover:bg-sky-300"
+    : "bg-slate-950 text-white hover:bg-slate-800";
+  const statusPillClass = isDark
+    ? "border-slate-700 bg-slate-900 text-slate-300"
+    : "border-slate-200 bg-slate-50 text-slate-600";
+  const boardClass = isDark ? "bg-board dark-board" : "bg-board";
+  const imageBaseClass = isDark ? "border-slate-700 bg-slate-900 shadow-[0_16px_36px_rgba(2,6,23,0.55)]" : "border-white/70 bg-white shadow-[0_16px_36px_rgba(15,23,42,0.12)]";
+  const imageSelectedClass = isDark
+    ? "border-sky-300 bg-slate-900 shadow-[0_0_0_3px_rgba(125,211,252,0.7),0_18px_40px_rgba(14,165,233,0.24)]"
+    : "border-sky-500 bg-white shadow-[0_0_0_3px_rgba(56,189,248,0.85),0_18px_40px_rgba(14,165,233,0.18)]";
+  const groupBaseClass = isDark ? "border-sky-500/70 bg-sky-500/10" : "border-sky-400 bg-sky-100/40";
+  const groupSelectedClass = isDark
+    ? "ring-4 ring-sky-400/40 shadow-[0_24px_50px_rgba(2,132,199,0.28)]"
+    : "ring-4 ring-sky-300/70 shadow-[0_24px_50px_rgba(14,165,233,0.16)]";
+  const noteBaseClass = isDark
+    ? "border-amber-900/60 bg-amber-950/45 shadow-[0_14px_28px_rgba(15,23,42,0.45)]"
+    : "border-amber-200 bg-yellow-50 shadow-[0_14px_28px_rgba(217,119,6,0.10)]";
+  const noteSelectedClass = isDark
+    ? "border-amber-300 bg-amber-950/65 ring-4 ring-amber-400/30 shadow-[0_22px_44px_rgba(120,53,15,0.4)]"
+    : "border-amber-400 bg-amber-50 ring-4 ring-amber-200/80 shadow-[0_22px_44px_rgba(245,158,11,0.18)]";
+
   return (
-    <div className="h-screen w-full bg-[linear-gradient(180deg,#f8fafc_0%,#edf2f7_100%)] text-neutral-900">
+    <div className={`h-screen w-full ${shellClass}`}>
       <div className="flex h-full flex-col">
-        <div className="border-b border-slate-200 bg-white/80 px-5 py-4 backdrop-blur-xl">
+        <div className={`border-b px-5 py-4 backdrop-blur-xl ${headerClass}`}>
           <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
             <div className="mr-4 flex items-center gap-3">
-              <div className="rounded-3xl bg-slate-950 px-4 py-2 text-sm font-semibold tracking-wide text-white shadow-lg">
-                PurrBoard
-              </div>
+              <div className={`rounded-3xl px-4 py-2 text-sm font-semibold tracking-wide shadow-lg ${badgeClass}`}>PurrBoard</div>
               <div>
-                <div className="text-sm font-semibold text-slate-800">画像を集めて、意味をつけて、まとめて動かす</div>
-                <div className="text-xs text-slate-500">PureRef の軽さと Milanote の整理感をひとつのボードに</div>
+                <div className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-800"}`}>
+                  画像を集めて、意味をつけて、まとめて動かす
+                </div>
+                <div className={`text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  PureRef の軽さと Milanote の整理感をひとつのボードに
+                </div>
               </div>
             </div>
 
-            <Button onClick={() => fileInputRef.current?.click()} className="rounded-2xl bg-slate-950 px-4 py-2.5 shadow-sm">
+            <Button onClick={() => fileInputRef.current?.click()} className={`rounded-2xl px-4 py-2.5 shadow-sm ${primaryButtonClass}`}>
               <Upload className="mr-2 h-4 w-4" />
               画像追加
             </Button>
-            <Button variant="outline" onClick={addNote} className="rounded-2xl border-slate-300 bg-white px-4 py-2.5">
+            <Button variant="outline" onClick={addNote} className={`rounded-2xl px-4 py-2.5 ${secondaryButtonClass}`}>
               <StickyNote className="mr-2 h-4 w-4" />
               メモ
             </Button>
             <Button
               variant="outline"
               onClick={groupSelection}
-              className="rounded-2xl border-slate-300 bg-white px-4 py-2.5"
+              className={`rounded-2xl px-4 py-2.5 ${secondaryButtonClass}`}
               disabled={selection.length < 2}
             >
               <Square className="mr-2 h-4 w-4" />
               グループ化
             </Button>
-            <Button variant="outline" onClick={() => zoom(1.1)} className="rounded-2xl border-slate-300 bg-white px-3 py-2.5" aria-label="zoom in">
+            <Button variant="outline" onClick={() => zoom(1.1)} className={`rounded-2xl px-3 py-2.5 ${secondaryButtonClass}`} aria-label="zoom in">
               <ZoomIn className="h-4 w-4" />
             </Button>
-            <Button variant="outline" onClick={() => zoom(0.9)} className="rounded-2xl border-slate-300 bg-white px-3 py-2.5" aria-label="zoom out">
+            <Button variant="outline" onClick={() => zoom(0.9)} className={`rounded-2xl px-3 py-2.5 ${secondaryButtonClass}`} aria-label="zoom out">
               <ZoomOut className="h-4 w-4" />
             </Button>
-            <Button variant="outline" onClick={resetView} className="rounded-2xl border-slate-300 bg-white px-4 py-2.5">
+            <Button variant="outline" onClick={resetView} className={`rounded-2xl px-4 py-2.5 ${secondaryButtonClass}`}>
               <RotateCcw className="mr-2 h-4 w-4" />
               リセット
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
+              className={`rounded-2xl px-4 py-2.5 ${secondaryButtonClass}`}
+              aria-label="toggle dark mode"
+            >
+              {isDark ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+              {isDark ? "Light" : "Dark"}
             </Button>
             <Button
               variant="destructive"
@@ -613,11 +683,11 @@ export default function PurrBoardMvpApp() {
             </Button>
 
             <div className="ml-auto flex items-center gap-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                選択 <span className="font-semibold text-slate-900">{activeSelection.length}</span>
+              <div className={`rounded-2xl border px-3 py-2 text-sm ${statusPillClass}`}>
+                選択 <span className={`font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>{activeSelection.length}</span>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                ズーム <span className="font-semibold text-slate-900">{Math.round(viewport.scale * 100)}%</span>
+              <div className={`rounded-2xl border px-3 py-2 text-sm ${statusPillClass}`}>
+                ズーム <span className={`font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>{Math.round(viewport.scale * 100)}%</span>
               </div>
             </div>
           </div>
@@ -626,7 +696,7 @@ export default function PurrBoardMvpApp() {
         <div className="flex flex-1">
           <div
             ref={boardRef}
-            className="relative flex-1 overflow-hidden bg-board"
+            className={`relative flex-1 overflow-hidden ${boardClass}`}
             onDragOver={(e) => e.preventDefault()}
             onDrop={onDrop}
             onPointerDown={(e) => {
@@ -634,8 +704,10 @@ export default function PurrBoardMvpApp() {
                 startPan(e.clientX, e.clientY);
                 return;
               }
+
               const rect = boardRef.current?.getBoundingClientRect();
               if (!rect) return;
+
               setSelection([]);
               setSelectionBox({
                 x1: e.clientX - rect.left,
@@ -660,11 +732,7 @@ export default function PurrBoardMvpApp() {
                     <div
                       key={obj.id}
                       data-image-id={obj.id}
-                      className={`absolute cursor-grab border bg-white transition ${
-                        selected
-                          ? "border-sky-500 shadow-[0_0_0_3px_rgba(56,189,248,0.85),0_18px_40px_rgba(14,165,233,0.18)]"
-                          : "border-white/70 shadow-[0_16px_36px_rgba(15,23,42,0.12)]"
-                      }`}
+                      className={`absolute cursor-grab border transition ${selected ? imageSelectedClass : imageBaseClass}`}
                       style={{ left: obj.x, top: obj.y, width: obj.width, height: obj.height }}
                       onPointerDown={(e) => startItemDrag(e, obj.id)}
                     >
@@ -703,13 +771,15 @@ export default function PurrBoardMvpApp() {
                     <div
                       key={obj.id}
                       data-group-id={obj.id}
-                      className={`absolute rounded-[32px] border-2 border-dashed border-sky-400 bg-sky-100/40 transition ${
-                        selected ? "ring-4 ring-sky-300/70 shadow-[0_24px_50px_rgba(14,165,233,0.16)]" : ""
-                      }`}
+                      className={`absolute rounded-[32px] border-2 border-dashed transition ${groupBaseClass} ${selected ? groupSelectedClass : ""}`}
                       style={{ left: obj.x, top: obj.y, width: obj.width, height: obj.height }}
                       onPointerDown={(e) => startItemDrag(e, obj.id)}
                     >
-                      <div className="absolute left-3 top-3 rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold text-sky-700 shadow">
+                      <div
+                        className={`absolute left-3 top-3 rounded-full border px-3 py-1 text-xs font-semibold shadow ${
+                          isDark ? "border-sky-400/30 bg-slate-950 text-sky-200" : "border-sky-200 bg-white text-sky-700"
+                        }`}
+                      >
                         {obj.text}
                       </div>
                     </div>
@@ -719,17 +789,13 @@ export default function PurrBoardMvpApp() {
                 return (
                   <div
                     key={obj.id}
-                    className={`absolute rounded-[26px] border p-3 shadow-md transition ${
-                      selected
-                        ? "border-amber-400 bg-amber-50 ring-4 ring-amber-200/80 shadow-[0_22px_44px_rgba(245,158,11,0.18)]"
-                        : "border-amber-200 bg-yellow-50 shadow-[0_14px_28px_rgba(217,119,6,0.10)]"
-                    }`}
+                    className={`absolute rounded-[26px] border p-3 shadow-md transition ${selected ? noteSelectedClass : noteBaseClass}`}
                     style={{ left: obj.x, top: obj.y, width: obj.width, minHeight: obj.height }}
                     onPointerDown={(e) => startItemDrag(e, obj.id)}
                   >
                     {selected && (
-                      <div className="mb-2 inline-flex rounded-full bg-amber-500 px-2.5 py-1 text-xs font-semibold text-white shadow">
-                        編集対象
+                      <div className={`mb-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold shadow ${isDark ? "bg-amber-400 text-slate-950" : "bg-amber-500 text-white"}`}>
+                        選択中
                       </div>
                     )}
                     <textarea
@@ -738,7 +804,7 @@ export default function PurrBoardMvpApp() {
                         const value = e.target.value;
                         setNotes((prev) => prev.map((note) => (note.id === obj.id ? { ...note, text: value } : note)));
                       }}
-                      className="min-h-[96px] w-full resize-none border-none bg-transparent text-sm outline-none"
+                      className={`min-h-[96px] w-full resize-none border-none bg-transparent text-sm outline-none ${isDark ? "text-amber-50 placeholder:text-amber-200/50" : "text-slate-800"}`}
                     />
                   </div>
                 );
@@ -747,7 +813,7 @@ export default function PurrBoardMvpApp() {
 
             {selectionBox && (
               <div
-                className="pointer-events-none absolute border-2 border-blue-400 bg-blue-200/20"
+                className={`pointer-events-none absolute border-2 ${isDark ? "border-sky-300 bg-sky-400/10" : "border-blue-400 bg-blue-200/20"}`}
                 style={{
                   left: Math.min(selectionBox.x1, selectionBox.x2),
                   top: Math.min(selectionBox.y1, selectionBox.y2),
@@ -759,21 +825,23 @@ export default function PurrBoardMvpApp() {
 
             {!items.length && !notes.length && (
               <div className="absolute inset-0 flex items-center justify-center p-8">
-                <Card className="max-w-xl rounded-[32px] border-white/70 bg-white/90 shadow-[0_30px_80px_rgba(15,23,42,0.14)]">
+                <Card className={`max-w-xl rounded-[32px] shadow-[0_30px_80px_rgba(15,23,42,0.14)] ${isDark ? "border-slate-800 bg-slate-950/90" : "border-white/70 bg-white/90"}`}>
                   <CardContent className="p-9 text-center">
-                    <div className="mx-auto mb-5 flex h-18 w-18 items-center justify-center rounded-[28px] bg-sky-50 shadow-inner">
-                      <ImageIcon className="h-8 w-8 text-sky-500" />
+                    <div className={`mx-auto mb-5 flex h-18 w-18 items-center justify-center rounded-[28px] shadow-inner ${isDark ? "bg-slate-900" : "bg-sky-50"}`}>
+                      <ImageIcon className={`h-8 w-8 ${isDark ? "text-sky-300" : "text-sky-500"}`} />
                     </div>
-                    <h2 className="mb-2 text-2xl font-semibold text-slate-900">画像を置いて、あとから整理する</h2>
-                    <p className="mb-6 text-sm leading-6 text-slate-500">
-                      ドラッグ&ドロップで画像を並べて、複数選択でまとめて動かせます。ホイールでズーム、角のハンドルで直感的にリサイズできます。
+                    <h2 className={`mb-2 text-2xl font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>
+                      画像を置いて、あとから整理する
+                    </h2>
+                    <p className={`mb-6 text-sm leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                      画像をドラッグ&ドロップ、または「画像追加」で読み込めます。ホイールでズーム、中クリックまたは Alt ドラッグでボード移動、四隅のハンドルでリサイズできます。
                     </p>
                     <div className="flex justify-center gap-2">
-                      <Button onClick={() => fileInputRef.current?.click()} className="rounded-2xl bg-slate-950 px-4 py-2.5">
+                      <Button onClick={() => fileInputRef.current?.click()} className={`rounded-2xl px-4 py-2.5 ${primaryButtonClass}`}>
                         <FolderOpen className="mr-2 h-4 w-4" />
                         画像を選ぶ
                       </Button>
-                      <Button variant="outline" onClick={addNote} className="rounded-2xl border-slate-300 bg-white px-4 py-2.5">
+                      <Button variant="outline" onClick={addNote} className={`rounded-2xl px-4 py-2.5 ${secondaryButtonClass}`}>
                         <StickyNote className="mr-2 h-4 w-4" />
                         メモを置く
                       </Button>

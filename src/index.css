@@ -6,6 +6,13 @@
   background: #f5f5f5;
   line-height: 1.5;
   font-weight: 400;
+  --board-dot-color: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="dark"] {
+  color: #e5e7eb;
+  background: #020617;
+  --board-dot-color: rgba(148, 163, 184, 0.18);
 }
 
 * {
@@ -42,6 +49,10 @@ img {
 }
 
 @utility bg-board {
-  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.08) 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--board-dot-color) 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+.dark-board {
+  background-color: rgba(2, 6, 23, 0.45);
 }
