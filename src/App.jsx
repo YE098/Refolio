@@ -109,7 +109,7 @@ function getSelectionIdsFromBox(selectionBox, objects, viewport) {
       const sy = obj.y * viewport.scale + viewport.y;
       const sw = (obj.width || 180) * viewport.scale;
       const sh = (obj.height || 120) * viewport.scale;
-      return sx >= x1 && sy >= y1 && sx + sw <= x2 && sy + sh <= y2;
+      return sx < x2 && sx + sw > x1 && sy < y2 && sy + sh > y1;
     })
     .map((obj) => obj.id);
 }
