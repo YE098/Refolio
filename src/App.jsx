@@ -22,6 +22,7 @@ const STORE_NAME = "boards";
 const BOARD_RECORD_KEY = "current";
 const MIN_SCALE = 0.01;
 const ARRANGE_GAP = 0;
+const NOTE_PLACEHOLDER = "メモを書く";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -187,6 +188,7 @@ export default function RefolioApp() {
   const [hasLoadedBoard, setHasLoadedBoard] = useState(false);
   const [theme, setTheme] = useState("light");
   const [arrangeMode, setArrangeMode] = useState("grid");
+  const [editingNoteId, setEditingNoteId] = useState(null);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem(THEME_KEY);
@@ -576,8 +578,30 @@ export default function RefolioApp() {
   const deleteSelected = () => {
     setItems((prev) => prev.filter((item) => !selection.includes(item.id)));
     setNotes((prev) => prev.filter((note) => !selection.includes(note.id)));
+    setEditingNoteId((prev) => (selection.includes(prev) ? null : prev));
     setSelection([]);
   };
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if ((event.key !== "Delete" && event.key !== "Backspace") || !selection.length) return;
+
+      const target = event.target;
+      const tagName = target?.tagName;
+      const isEditable =
+        tagName === "INPUT" ||
+        tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+
+      if (isEditable) return;
+
+      event.preventDefault();
+      deleteSelected();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selection]);
 
   const addNote = () => {
     const centerX = (-viewport.x + boardSize.width / 2) / viewport.scale;
@@ -585,7 +609,7 @@ export default function RefolioApp() {
     const note = {
       id: uid(),
       type: "note",
-      text: "メモを書く",
+      text: "",
       x: centerX,
       y: centerY,
       width: 220,
@@ -595,6 +619,7 @@ export default function RefolioApp() {
 
     setNotes((prev) => [...prev, note]);
     setSelection([note.id]);
+    setEditingNoteId(note.id);
   };
 
   const groupSelection = () => {
@@ -743,10 +768,10 @@ export default function RefolioApp() {
     ? "ring-4 ring-sky-400/40 shadow-[0_24px_50px_rgba(2,132,199,0.28)]"
     : "ring-4 ring-sky-300/70 shadow-[0_24px_50px_rgba(14,165,233,0.16)]";
   const noteBaseClass = isDark
-    ? "border-amber-900/60 bg-amber-950/45 shadow-[0_14px_28px_rgba(15,23,42,0.45)]"
+    ? "border-amber-900/70 bg-[#3b1808] shadow-[0_14px_28px_rgba(15,23,42,0.45)]"
     : "border-amber-200 bg-yellow-50 shadow-[0_14px_28px_rgba(217,119,6,0.10)]";
   const noteSelectedClass = isDark
-    ? "border-amber-300 bg-amber-950/65 ring-4 ring-amber-400/30 shadow-[0_22px_44px_rgba(120,53,15,0.4)]"
+    ? "border-amber-300 bg-[#4a1d0a] ring-4 ring-amber-400/30 shadow-[0_22px_44px_rgba(120,53,15,0.4)]"
     : "border-amber-400 bg-amber-50 ring-4 ring-amber-200/80 shadow-[0_22px_44px_rgba(245,158,11,0.18)]";
 
   return (
@@ -960,20 +985,39 @@ export default function RefolioApp() {
                     className={`absolute rounded-[26px] border p-3 shadow-md transition ${selected ? noteSelectedClass : noteBaseClass}`}
                     style={{ left: obj.x, top: obj.y, width: obj.width, minHeight: obj.height }}
                     onPointerDown={(e) => startItemDrag(e, obj.id)}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      setSelection([obj.id]);
+                      setEditingNoteId(obj.id);
+                    }}
                   >
-                    {selected && (
+                    {false && selected && (
                       <div className={`mb-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold shadow ${isDark ? "bg-amber-400 text-slate-950" : "bg-amber-500 text-white"}`}>
                         選択中
                       </div>
                     )}
-                    <textarea
-                      value={obj.text}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setNotes((prev) => prev.map((note) => (note.id === obj.id ? { ...note, text: value } : note)));
-                      }}
-                      className={`min-h-[96px] w-full resize-none border-none bg-transparent text-sm outline-none ${isDark ? "text-amber-50 placeholder:text-amber-200/50" : "text-slate-800"}`}
-                    />
+                    {editingNoteId === obj.id ? (
+                      <textarea
+                        autoFocus
+                        value={obj.text === NOTE_PLACEHOLDER ? "" : obj.text}
+                        placeholder={NOTE_PLACEHOLDER}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setNotes((prev) => prev.map((note) => (note.id === obj.id ? { ...note, text: value } : note)));
+                        }}
+                        onBlur={() => setEditingNoteId((prev) => (prev === obj.id ? null : prev))}
+                        className={`min-h-[96px] w-full resize-none border-none bg-transparent text-sm outline-none ${isDark ? "text-amber-50 placeholder:text-amber-200/50" : "text-slate-800"}`}
+                      />
+                    ) : (
+                      <div className={`min-h-[96px] whitespace-pre-wrap break-words text-sm leading-6 ${isDark ? "text-amber-50" : "text-slate-800"}`}>
+                        {!obj.text || obj.text === NOTE_PLACEHOLDER ? (
+                          <span className={isDark ? "text-amber-200/45" : "text-slate-400"}>{NOTE_PLACEHOLDER}</span>
+                        ) : (
+                          obj.text
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
