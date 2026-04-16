@@ -172,6 +172,8 @@ export default function PurrBoardMvpApp() {
   const boardRef = useRef(null);
   const fileInputRef = useRef(null);
   const panStateRef = useRef(null);
+  const moveFrameRef = useRef(null);
+  const pointerSampleRef = useRef(null);
 
   const [items, setItems] = useState([]);
   const [notes, setNotes] = useState([]);
@@ -454,10 +456,13 @@ export default function PurrBoardMvpApp() {
     });
   };
 
-  const onPointerMove = useCallback(
-    (e) => {
-      if (resizing) {
-        const point = toBoardCoords(e.clientX, e.clientY);
+  const flushPointerMove = useCallback(() => {
+    moveFrameRef.current = null;
+    const sample = pointerSampleRef.current;
+    if (!sample) return;
+
+    if (resizing) {
+      const point = toBoardCoords(sample.clientX, sample.clientY);
         const { handle, initial, aspectRatio } = resizing;
         const anchorX = handle.includes("w") ? initial.x + initial.width : initial.x;
         const anchorY = handle.includes("n") ? initial.y + initial.height : initial.y;
@@ -480,7 +485,7 @@ export default function PurrBoardMvpApp() {
           })
         );
       } else if (dragging) {
-        const point = toBoardCoords(e.clientX, e.clientY);
+        const point = toBoardCoords(sample.clientX, sample.clientY);
         const dx = point.x - dragging.startPointer.x;
         const dy = point.y - dragging.startPointer.y;
 
@@ -501,8 +506,8 @@ export default function PurrBoardMvpApp() {
         const panState = panStateRef.current;
         if (!panState) return;
 
-        const dx = e.clientX - panState.startClientX;
-        const dy = e.clientY - panState.startClientY;
+        const dx = sample.clientX - panState.startClientX;
+        const dy = sample.clientY - panState.startClientY;
         setViewport((prev) => ({
           ...prev,
           x: panState.startViewportX + dx,
@@ -511,13 +516,29 @@ export default function PurrBoardMvpApp() {
       } else if (selectionBox) {
         const rect = boardRef.current?.getBoundingClientRect();
         if (!rect) return;
-        setSelectionBox((prev) => ({ ...prev, x2: e.clientX - rect.left, y2: e.clientY - rect.top }));
+        setSelectionBox((prev) => ({
+          ...prev,
+          x2: sample.clientX - rect.left,
+          y2: sample.clientY - rect.top,
+        }));
       }
+  }, [dragging, isPanning, resizing, selectionBox, toBoardCoords]);
+
+  const onPointerMove = useCallback(
+    (e) => {
+      pointerSampleRef.current = { clientX: e.clientX, clientY: e.clientY };
+      if (moveFrameRef.current !== null) return;
+      moveFrameRef.current = window.requestAnimationFrame(flushPointerMove);
     },
-    [dragging, isPanning, resizing, selectionBox, toBoardCoords]
+    [flushPointerMove]
   );
 
   const onPointerUp = useCallback(() => {
+    if (moveFrameRef.current !== null) {
+      window.cancelAnimationFrame(moveFrameRef.current);
+      moveFrameRef.current = null;
+    }
+    pointerSampleRef.current = null;
     setDragging(null);
     setResizing(null);
     setIsPanning(false);
@@ -534,6 +555,10 @@ export default function PurrBoardMvpApp() {
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
     return () => {
+      if (moveFrameRef.current !== null) {
+        window.cancelAnimationFrame(moveFrameRef.current);
+        moveFrameRef.current = null;
+      }
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
@@ -733,10 +758,10 @@ export default function PurrBoardMvpApp() {
               <div className={`rounded-3xl px-4 py-2 text-sm font-semibold tracking-wide shadow-lg ${badgeClass}`}>PurrBoard</div>
               <div>
                 <div className={`text-sm font-semibold leading-5 ${isDark ? "text-slate-100" : "text-slate-800"}`}>
-                  画像を集めて、意味をつけて、まとめて動かす
+                  置く、つなぐ、まとめる
                 </div>
                 <div className={`mt-1 text-xs leading-5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  PureRef の軽さと Milanote の整理感をひとつのボードに
+                  参考画像とメモを、ひとつのボードで軽やかに整理する
                 </div>
               </div>
             </div>
