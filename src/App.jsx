@@ -1045,8 +1045,11 @@ export default function RefolioApp() {
                     <h2 className={`mb-2 text-2xl font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>
                       画像を置いて、あとから整理する
                     </h2>
-                    <p className={`mb-6 text-sm leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    <p className={`hidden mb-6 text-sm leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                       画像をドラッグ&ドロップ、または「画像追加」で読み込めます。ホイールでズーム、中クリックまたは Alt ドラッグでボード移動、四隅のハンドルでリサイズできます。
+                    </p>
+                    <p className={`mb-6 text-sm leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                      画像を置いて、ドラッグで動かし、必要ならメモを添えられます。
                     </p>
                     <div className="flex justify-center gap-2">
                       <Button onClick={() => fileInputRef.current?.click()} className={`rounded-2xl px-4 py-2.5 ${primaryButtonClass}`}>
