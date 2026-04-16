@@ -233,6 +233,7 @@ export default function RefolioApp() {
   const panStateRef = useRef(null);
   const moveFrameRef = useRef(null);
   const pointerSampleRef = useRef(null);
+  const persistTimerRef = useRef(null);
 
   const [items, setItems] = useState([]);
   const [notes, setNotes] = useState([]);
@@ -320,14 +321,28 @@ export default function RefolioApp() {
   useEffect(() => {
     if (!hasLoadedBoard) return;
 
-    const payload = { items, notes, viewport };
-    writeBoardState(payload).catch(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-      } catch {
-        // ignore persistence failures so the board keeps working
+    if (persistTimerRef.current !== null) {
+      window.clearTimeout(persistTimerRef.current);
+    }
+
+    persistTimerRef.current = window.setTimeout(() => {
+      const payload = { items, notes, viewport };
+      writeBoardState(payload).catch(() => {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        } catch {
+          // ignore persistence failures so the board keeps working
+        }
+      });
+      persistTimerRef.current = null;
+    }, 180);
+
+    return () => {
+      if (persistTimerRef.current !== null) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
       }
-    });
+    };
   }, [hasLoadedBoard, items, notes, viewport]);
 
   useEffect(() => {
@@ -481,11 +496,12 @@ export default function RefolioApp() {
     setSelection(normalizedSelection);
     setDragging({
       ids: dragIds,
+      idSet: new Set(dragIds),
       startPointer: point,
-      initialPositions: dragIds.map((itemId) => {
+      initialPositions: new Map(dragIds.map((itemId) => {
         const obj = getObjectById(itemId);
         return { id: itemId, x: obj.x, y: obj.y };
-      }),
+      }).map((entry) => [entry.id, entry])),
     });
   };
 
@@ -550,14 +566,16 @@ export default function RefolioApp() {
 
         setItems((prev) =>
           prev.map((item) => {
-            const original = dragging.initialPositions.find((entry) => entry.id === item.id);
+            if (!dragging.idSet.has(item.id)) return item;
+            const original = dragging.initialPositions.get(item.id);
             return original ? { ...item, x: original.x + dx, y: original.y + dy } : item;
           })
         );
 
         setNotes((prev) =>
           prev.map((note) => {
-            const original = dragging.initialPositions.find((entry) => entry.id === note.id);
+            if (!dragging.idSet.has(note.id)) return note;
+            const original = dragging.initialPositions.get(note.id);
             return original ? { ...note, x: original.x + dx, y: original.y + dy } : note;
           })
         );
