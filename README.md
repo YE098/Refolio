@@ -1,4 +1,4 @@
-# PurrBoard MVP
+# Refolio
 
 ## すぐ試す方法
 

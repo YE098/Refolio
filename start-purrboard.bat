@@ -8,13 +8,13 @@ if not exist "node_modules" (
   if errorlevel 1 goto :fail
 )
 
-echo Starting PurrBoard...
+echo Starting Refolio...
 call npm run dev
 if errorlevel 1 goto :fail
 goto :eof
 
 :fail
 echo.
-echo Failed to start PurrBoard.
+echo Failed to start Refolio.
 pause
 exit /b 1

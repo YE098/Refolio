@@ -15,9 +15,9 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-const STORAGE_KEY = "purrboard-mvp-v1";
-const THEME_KEY = "purrboard-theme";
-const DB_NAME = "purrboard-db";
+const STORAGE_KEY = "refolio-v1";
+const THEME_KEY = "refolio-theme";
+const DB_NAME = "refolio-db";
 const STORE_NAME = "boards";
 const BOARD_RECORD_KEY = "current";
 const MIN_SCALE = 0.01;
@@ -168,7 +168,7 @@ async function writeBoardState(payload) {
   });
 }
 
-export default function PurrBoardMvpApp() {
+export default function RefolioApp() {
   const boardRef = useRef(null);
   const fileInputRef = useRef(null);
   const panStateRef = useRef(null);
@@ -755,7 +755,7 @@ export default function PurrBoardMvpApp() {
         <div className={`border-b px-5 py-4 backdrop-blur-xl ${headerClass}`}>
           <div className="mx-auto flex max-w-7xl flex-col gap-4">
             <div className="flex items-start gap-3">
-              <div className={`rounded-3xl px-4 py-2 text-sm font-semibold tracking-wide shadow-lg ${badgeClass}`}>PurrBoard</div>
+              <div className={`rounded-3xl px-4 py-2 text-sm font-semibold tracking-wide shadow-lg ${badgeClass}`}>Refolio</div>
               <div>
                 <div className={`text-sm font-semibold leading-5 ${isDark ? "text-slate-100" : "text-slate-800"}`}>
                   置く、つなぐ、まとめる
