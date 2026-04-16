@@ -50,50 +50,108 @@ function getSelectionBounds(objects) {
 }
 
 function createGridArrangement(images) {
-  const cols = Math.max(1, Math.ceil(Math.sqrt(images.length)));
-  const rowCount = Math.ceil(images.length / cols);
-  const colWidths = Array(cols).fill(0);
-  const rowHeights = Array(rowCount).fill(0);
-
-  images.forEach((image, index) => {
-    const col = index % cols;
-    const row = Math.floor(index / cols);
-    colWidths[col] = Math.max(colWidths[col], image.width);
-    rowHeights[row] = Math.max(rowHeights[row], image.height);
-  });
-
-  return images.map((image, index) => {
-    const col = index % cols;
-    const row = Math.floor(index / cols);
-    const x = colWidths.slice(0, col).reduce((sum, width) => sum + width, 0) + col * ARRANGE_GAP;
-    const y = rowHeights.slice(0, row).reduce((sum, height) => sum + height, 0) + row * ARRANGE_GAP;
-    return { id: image.id, x, y };
-  });
+  return createPackedArrangement(images);
 }
 
-function createPackedArrangement(images, sourceBounds) {
-  const maxRowWidth = Math.max(
-    Math.round(Math.sqrt(images.reduce((sum, image) => sum + image.width * image.height, 0)) * 1.8),
-    sourceBounds.maxX - sourceBounds.minX
-  );
+function createPackedArrangement(images) {
+  const totalArea = images.reduce((sum, image) => sum + image.width * image.height, 0);
+  const widestImage = Math.max(...images.map((image) => image.width));
+  const tallestImage = Math.max(...images.map((image) => image.height));
+  const preferredWidth = Math.round(Math.sqrt(totalArea) * 1.18);
+  const balancingWidth = Math.round(Math.sqrt(images.length) * ((widestImage + tallestImage) / 2) * 0.42);
+  const targetWidth = Math.max(420, widestImage, preferredWidth + balancingWidth);
+  const hardWrapWidth = Math.round(targetWidth * 1.12);
 
-  let cursorX = 0;
-  let cursorY = 0;
-  let rowHeight = 0;
+  const sortedImages = [...images].sort((a, b) => {
+    const longestEdgeDiff = Math.max(b.width, b.height) - Math.max(a.width, a.height);
+    if (longestEdgeDiff !== 0) return longestEdgeDiff;
 
-  return images.map((image, index) => {
-    const nextWidth = cursorX === 0 ? image.width : cursorX + ARRANGE_GAP + image.width;
-    if (index > 0 && nextWidth > maxRowWidth) {
-      cursorX = 0;
-      cursorY += rowHeight + ARRANGE_GAP;
-      rowHeight = 0;
+    const areaDiff = b.width * b.height - a.width * a.height;
+    if (areaDiff !== 0) return areaDiff;
+
+    return b.height - a.height;
+  });
+
+  const placed = [];
+
+  const overlaps = (candidate, rect) =>
+    candidate.x < rect.x + rect.width &&
+    candidate.x + candidate.width > rect.x &&
+    candidate.y < rect.y + rect.height &&
+    candidate.y + candidate.height > rect.y;
+
+  sortedImages.forEach((image) => {
+    const candidates = [{ x: 0, y: 0 }];
+
+    placed.forEach((rect) => {
+      candidates.push({ x: rect.x + rect.width + ARRANGE_GAP, y: rect.y });
+      candidates.push({ x: rect.x, y: rect.y + rect.height + ARRANGE_GAP });
+    });
+
+    const uniqueCandidates = [...new Map(candidates.map((point) => [`${point.x}:${point.y}`, point])).values()]
+      .filter((point) => point.x >= 0 && point.y >= 0)
+      .sort((a, b) => (a.y - b.y) || (a.x - b.x));
+
+    let bestPlacement = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    uniqueCandidates.forEach((point) => {
+      const candidate = {
+        id: image.id,
+        x: point.x,
+        y: point.y,
+        width: image.width,
+        height: image.height,
+      };
+
+      if (placed.some((rect) => overlaps(candidate, rect))) return;
+
+      const nextWidth = Math.max(0, ...placed.map((rect) => rect.x + rect.width), candidate.x + candidate.width);
+      const nextHeight = Math.max(0, ...placed.map((rect) => rect.y + rect.height), candidate.y + candidate.height);
+      if (nextWidth > hardWrapWidth) return;
+
+      const widthPenalty = Math.max(0, nextWidth - targetWidth);
+      const emptyAreaPenalty = nextWidth * nextHeight - (placed.reduce((sum, rect) => sum + rect.width * rect.height, 0) + image.width * image.height);
+      const edgeContact = placed.reduce((sum, rect) => {
+        const verticalTouch =
+          (candidate.x + candidate.width === rect.x || rect.x + rect.width === candidate.x) &&
+          Math.min(candidate.y + candidate.height, rect.y + rect.height) > Math.max(candidate.y, rect.y);
+        const horizontalTouch =
+          (candidate.y + candidate.height === rect.y || rect.y + rect.height === candidate.y) &&
+          Math.min(candidate.x + candidate.width, rect.x + rect.width) > Math.max(candidate.x, rect.x);
+        return sum + (verticalTouch ? 1 : 0) + (horizontalTouch ? 1 : 0);
+      }, 0);
+
+      const score =
+        candidate.y * 220 +
+        candidate.x * 8 +
+        widthPenalty * 140 +
+        Math.abs(nextWidth - targetWidth) * 0.4 +
+        nextHeight * 1.6 +
+        emptyAreaPenalty * 0.02 -
+        edgeContact * 120;
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestPlacement = candidate;
+      }
+    });
+
+    if (!bestPlacement) {
+      const boundsWidth = Math.max(0, ...placed.map((rect) => rect.x + rect.width));
+      bestPlacement = {
+        id: image.id,
+        x: boundsWidth === 0 ? 0 : boundsWidth + ARRANGE_GAP,
+        y: 0,
+        width: image.width,
+        height: image.height,
+      };
     }
 
-    const position = { id: image.id, x: cursorX, y: cursorY };
-    cursorX += image.width + ARRANGE_GAP;
-    rowHeight = Math.max(rowHeight, image.height);
-    return position;
+    placed.push(bestPlacement);
   });
+
+  return placed.map(({ id, x, y }) => ({ id, x, y }));
 }
 
 function getSelectionIdsFromBox(selectionBox, objects, viewport) {
@@ -187,7 +245,6 @@ export default function RefolioApp() {
   const [boardSize, setBoardSize] = useState({ width: 1200, height: 800 });
   const [hasLoadedBoard, setHasLoadedBoard] = useState(false);
   const [theme, setTheme] = useState("light");
-  const [arrangeMode, setArrangeMode] = useState("grid");
   const [editingNoteId, setEditingNoteId] = useState(null);
 
   useEffect(() => {
@@ -658,10 +715,7 @@ export default function RefolioApp() {
     if (selectedImages.length < 2) return;
 
     const sourceBounds = getSelectionBounds(selectedImages);
-    const nextPositions =
-      arrangeMode === "pack"
-        ? createPackedArrangement(selectedImages, sourceBounds)
-        : createGridArrangement(selectedImages);
+    const nextPositions = createGridArrangement(selectedImages);
 
     const arrangedById = new Map(
       nextPositions.map((position) => [
@@ -778,8 +832,8 @@ export default function RefolioApp() {
     <div className={`h-screen w-full ${shellClass}`}>
       <div className="flex h-full flex-col">
         <div className={`border-b px-5 py-4 backdrop-blur-xl ${headerClass}`}>
-          <div className="mx-auto flex max-w-7xl flex-col gap-4">
-            <div className="flex items-start gap-3">
+          <div className="mx-auto flex max-w-7xl flex-col items-center gap-4">
+            <div className="flex items-start justify-center gap-3 text-center">
               <div className={`rounded-3xl px-4 py-2 text-sm font-semibold tracking-wide shadow-lg ${badgeClass}`}>Refolio</div>
               <div>
                 <div className={`text-sm font-semibold leading-5 ${isDark ? "text-slate-100" : "text-slate-800"}`}>
@@ -791,7 +845,7 @@ export default function RefolioApp() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2">
             <Button onClick={() => fileInputRef.current?.click()} className={`rounded-2xl px-4 py-2.5 shadow-sm ${primaryButtonClass}`}>
               <Upload className="mr-2 h-4 w-4" />
               画像追加
@@ -809,11 +863,10 @@ export default function RefolioApp() {
               <Square className="mr-2 h-4 w-4" />
               グループ化
             </Button>
-            <label className={`flex items-center rounded-2xl border px-3 py-2 text-sm ${statusPillClass}`}>
+            <label className="hidden">
               <span className="mr-2 whitespace-nowrap">整列</span>
               <select
-                value={arrangeMode}
-                onChange={(e) => setArrangeMode(e.target.value)}
+                value="grid"
                 className={`bg-transparent outline-none ${isDark ? "text-white" : "text-slate-900"}`}
               >
                 <option value="grid">グリッド</option>
@@ -859,7 +912,7 @@ export default function RefolioApp() {
 
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2">
               <div className={`rounded-2xl border px-3 py-2 text-sm ${statusPillClass}`}>
                 選択 <span className={`font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>{activeSelection.length}</span>
               </div>
